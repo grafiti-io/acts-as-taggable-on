@@ -48,6 +48,7 @@ module ActsAsTaggableOn::Taggable
             end
 
             def #{tag_type}_list=(new_tags)
+              # @_tags_changed = true
               parsed_new_list = ActsAsTaggableOn.default_parser.new(new_tags).parse
 
               if self.class.preserve_tag_order? || (parsed_new_list.sort != #{tag_type}_list.sort)
@@ -228,52 +229,55 @@ module ActsAsTaggableOn::Taggable
     end
 
     def save_tags
-      tagging_contexts.each do |context|
-        next unless tag_list_cache_set_on(context)
-        # List of currently assigned tag names
-        tag_list = tag_list_cache_on(context).uniq
+      Rails.logger.info '======================================== savetags ========================================'
+      Rails.logger.info "@_tags_changed: #{@_tags_changed}"
+      if !!@_tags_changed
+        tagging_contexts.each do |context|
+          next unless tag_list_cache_set_on(context)
+          # List of currently assigned tag names
+          tag_list = tag_list_cache_on(context).uniq
 
-        # Find existing tags or create non-existing tags:
-        tags = find_or_create_tags_from_list_with_context(tag_list, context)
+          # Find existing tags or create non-existing tags:
+          tags = find_or_create_tags_from_list_with_context(tag_list, context)
 
-        # Tag objects for currently assigned tags
-        current_tags = tags_on(context)
+          # Tag objects for currently assigned tags
+          current_tags = tags_on(context)
 
-        # Tag maintenance based on whether preserving the created order of tags
-        if self.class.preserve_tag_order?
-          old_tags, new_tags = current_tags - tags, tags - current_tags
+          # Tag maintenance based on whether preserving the created order of tags
+          if self.class.preserve_tag_order?
+            old_tags, new_tags = current_tags - tags, tags - current_tags
 
-          shared_tags = current_tags & tags
+            shared_tags = current_tags & tags
 
-          if shared_tags.any? && tags[0...shared_tags.size] != shared_tags
-            index = shared_tags.each_with_index { |_, i| break i unless shared_tags[i] == tags[i] }
+            if shared_tags.any? && tags[0...shared_tags.size] != shared_tags
+              index = shared_tags.each_with_index { |_, i| break i unless shared_tags[i] == tags[i] }
 
-            # Update arrays of tag objects
-            old_tags |= current_tags[index...current_tags.size]
-            new_tags |= current_tags[index...current_tags.size] & shared_tags
+              # Update arrays of tag objects
+              old_tags |= current_tags[index...current_tags.size]
+              new_tags |= current_tags[index...current_tags.size] & shared_tags
 
-            # Order the array of tag objects to match the tag list
-            new_tags = tags.map do |t|
-              new_tags.find { |n| n.name.downcase == t.name.downcase }
-            end.compact
+              # Order the array of tag objects to match the tag list
+              new_tags = tags.map do |t|
+                new_tags.find { |n| n.name.downcase == t.name.downcase }
+              end.compact
+            end
+          else
+            # Delete discarded tags and create new tags
+            old_tags = current_tags - tags
+            new_tags = tags - current_tags
           end
-        else
-          # Delete discarded tags and create new tags
-          old_tags = current_tags - tags
-          new_tags = tags - current_tags
-        end
 
-        # Destroy old taggings:
-        if old_tags.present?
-          taggings.not_owned.by_context(context).where(tag_id: old_tags).destroy_all
-        end
+          # Destroy old taggings:
+          if old_tags.present?
+            taggings.not_owned.by_context(context).where(tag_id: old_tags).destroy_all
+          end
 
-        # Create new taggings:
-        new_tags.each do |tag|
-          taggings.create!(tag_id: tag.id, context: context.to_s, taggable: self)
+          # Create new taggings:
+          new_tags.each do |tag|
+            taggings.create!(tag_id: tag.id, context: context.to_s, taggable: self)
+          end
         end
       end
-
       true
     end
 
