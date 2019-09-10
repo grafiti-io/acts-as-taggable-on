@@ -19,7 +19,6 @@ module ActsAsTaggableOn
     #   tag_list.add("Fun", "Happy")
     #   tag_list.add("Fun, Happy", :parse => true)
     def add(*names)
-      @_tags_changed = true
       extract_and_apply_options!(names)
       concat(names)
       clean!
@@ -30,20 +29,17 @@ module ActsAsTaggableOn
     # expression returns the tag_list itself, so several appends
     # may be chained together.
     def <<(obj)
-      @_tags_changed = true
       add(obj)
     end
 
     # Concatenation --- Returns a new tag list built by concatenating the
     # two tag lists together to produce a third tag list.
     def +(other_tag_list)
-      @_tags_changed = true
       TagList.new.add(self).add(other_tag_list)
     end
 
     # Appends the elements of +other_tag_list+ to +self+.
     def concat(other_tag_list)
-      @_tags_changed = true
       super(other_tag_list).send(:clean!)
       self
     end
@@ -56,7 +52,6 @@ module ActsAsTaggableOn
     #   tag_list.remove("Sad", "Lonely")
     #   tag_list.remove("Sad, Lonely", :parse => true)
     def remove(*names)
-      @_tags_changed = true
       extract_and_apply_options!(names)
       delete_if { |name| names.include?(name) }
       self

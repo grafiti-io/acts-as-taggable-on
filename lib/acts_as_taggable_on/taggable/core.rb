@@ -48,7 +48,7 @@ module ActsAsTaggableOn::Taggable
             end
 
             def #{tag_type}_list=(new_tags)
-              # @_tags_changed = true
+              Rails.logger.info "#{tag_type}_list= was called"
               parsed_new_list = ActsAsTaggableOn.default_parser.new(new_tags).parse
 
               if self.class.preserve_tag_order? || (parsed_new_list.sort != #{tag_type}_list.sort)
@@ -151,7 +151,9 @@ module ActsAsTaggableOn::Taggable
     end
 
     def tag_list_cache_on(context)
+      Rails.logger.info 'tag_list_cache_on'
       variable_name = "@#{context.to_s.singularize}_list"
+      preloaded_variable_name = "@preloaded_#{context.to_s.singularize}_list"
       if instance_variable_get(variable_name)
         instance_variable_get(variable_name)
       elsif cached_tag_list_on(context) && ensure_included_cache_methods! && self.class.caching_tag_list_on?(context)
@@ -159,9 +161,34 @@ module ActsAsTaggableOn::Taggable
       else
         instance_variable_set(variable_name, ActsAsTaggableOn::TagList.new(tags_on(context).map(&:name)))
       end
+      instance_variable_set(preloaded_variable_name, instance_variable_get(variable_name)) unless instance_variable_defined? preloaded_variable_name
+      instance_variable_get(variable_name)
+    end
+
+    def tag_list_changed?(context)
+      variable_name = "@#{context.to_s.singularize}_list"
+      preloaded_variable_name = "@preloaded_#{context.to_s.singularize}_list"
+      # return false unless the list of tags for the context was called at least once
+      return false unless instance_variable_defined?(variable_name) && instance_variable_defined?(preloaded_variable_name)
+
+      current_tags_for_context = instance_variable_get(variable_name)
+      preloaded_tags_for_context = instance_variable_get(preloaded_variable_name)
+
+      if current_tags_for_context.is_a?(Array) && preloaded_tags_for_context.is_a?(Array)
+        current_tags_for_context = current_tags_for_context.uniq.sort
+        preloaded_tags_for_context = preloaded_tags_for_context.uniq.sort
+
+        current_sub_preloaded = current_tags_for_context - preloaded_tags_for_context
+        preloaded_sub_current = preloaded_tags_for_context - current_tags_for_context
+
+        return current_sub_preloaded.present? || preloaded_sub_current.present? 
+      else
+        return false
+      end
     end
 
     def tag_list_on(context)
+      Rails.logger.info 'tag_list_on'
       add_custom_context(context)
       tag_list_cache_on(context)
     end
@@ -230,52 +257,52 @@ module ActsAsTaggableOn::Taggable
 
     def save_tags
       Rails.logger.info '======================================== savetags ========================================'
-      Rails.logger.info "@_tags_changed: #{@_tags_changed}"
-      if !!@_tags_changed
-        tagging_contexts.each do |context|
-          next unless tag_list_cache_set_on(context)
-          # List of currently assigned tag names
-          tag_list = tag_list_cache_on(context).uniq
+      tagging_contexts.each do |context|
+        next unless tag_list_changed?(context)
+        Rails.logger.info "tag_list_changed for context: #{context}"
+        # List of currently assigned tag names
+        tag_list = tag_list_cache_on(context).uniq
+        Rails.logger.info "object's tag_list: #{tag_list.ai}"
 
-          # Find existing tags or create non-existing tags:
-          tags = find_or_create_tags_from_list_with_context(tag_list, context)
+        # Find existing tags or create non-existing tags:
+        tags = find_or_create_tags_from_list_with_context(tag_list, context)
 
-          # Tag objects for currently assigned tags
-          current_tags = tags_on(context)
+        # Tag objects for currently assigned tags
+        current_tags = tags_on(context)
+        Rails.logger.info "DB's tag_list: #{current_tags.ai}"
 
-          # Tag maintenance based on whether preserving the created order of tags
-          if self.class.preserve_tag_order?
-            old_tags, new_tags = current_tags - tags, tags - current_tags
+        # Tag maintenance based on whether preserving the created order of tags
+        if self.class.preserve_tag_order?
+          old_tags, new_tags = current_tags - tags, tags - current_tags
 
-            shared_tags = current_tags & tags
+          shared_tags = current_tags & tags
 
-            if shared_tags.any? && tags[0...shared_tags.size] != shared_tags
-              index = shared_tags.each_with_index { |_, i| break i unless shared_tags[i] == tags[i] }
+          if shared_tags.any? && tags[0...shared_tags.size] != shared_tags
+            index = shared_tags.each_with_index { |_, i| break i unless shared_tags[i] == tags[i] }
 
-              # Update arrays of tag objects
-              old_tags |= current_tags[index...current_tags.size]
-              new_tags |= current_tags[index...current_tags.size] & shared_tags
+            # Update arrays of tag objects
+            old_tags |= current_tags[index...current_tags.size]
+            new_tags |= current_tags[index...current_tags.size] & shared_tags
 
-              # Order the array of tag objects to match the tag list
-              new_tags = tags.map do |t|
-                new_tags.find { |n| n.name.downcase == t.name.downcase }
-              end.compact
-            end
-          else
-            # Delete discarded tags and create new tags
-            old_tags = current_tags - tags
-            new_tags = tags - current_tags
+            # Order the array of tag objects to match the tag list
+            new_tags = tags.map do |t|
+              new_tags.find { |n| n.name.downcase == t.name.downcase }
+            end.compact
           end
+        else
+          # Delete discarded tags and create new tags
+          old_tags = current_tags - tags
+          new_tags = tags - current_tags
+        end
 
-          # Destroy old taggings:
-          if old_tags.present?
-            taggings.not_owned.by_context(context).where(tag_id: old_tags).destroy_all
-          end
+        # Destroy old taggings:
+        if old_tags.present?
+          taggings.not_owned.by_context(context).where(tag_id: old_tags).destroy_all
+        end
 
-          # Create new taggings:
-          new_tags.each do |tag|
-            taggings.create!(tag_id: tag.id, context: context.to_s, taggable: self)
-          end
+        # Create new taggings:
+        new_tags.each do |tag|
+          taggings.create!(tag_id: tag.id, context: context.to_s, taggable: self)
         end
       end
       true
