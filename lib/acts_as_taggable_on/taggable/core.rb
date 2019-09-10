@@ -160,8 +160,8 @@ module ActsAsTaggableOn::Taggable
         instance_variable_set(variable_name, ActsAsTaggableOn::TagList.new(tags_on(context).map(&:name)))
       end
       unless instance_variable_defined? original_variable_name
-        Rails.logger.debug "#{original_variable_name} not set for context: #{context}"
-        Rails.logger.debug "instance_variable_get('#{variable_name}') is array: #{instance_variable_get(variable_name).is_a? Array}"
+        # Rails.logger.debug "#{original_variable_name} not set for context: #{context}"
+        # Rails.logger.debug "instance_variable_get('#{variable_name}') is array: #{instance_variable_get(variable_name).is_a? Array}"
         instance_variable_set(original_variable_name, instance_variable_get(variable_name).clone) 
       end
       instance_variable_get(variable_name)
@@ -171,14 +171,14 @@ module ActsAsTaggableOn::Taggable
       variable_name = "@#{context.to_s.singularize}_list"
       original_variable_name = "@original_#{context.to_s.singularize}_list"
       # returns false unless the instance variables have been defined
-      Rails.logger.debug "instance_variable_defined?(#{variable_name}): #{instance_variable_defined?(variable_name)} && instance_variable_defined?(#{original_variable_name}): #{instance_variable_defined?(original_variable_name)}"
+      # Rails.logger.debug "instance_variable_defined?(#{variable_name}): #{instance_variable_defined?(variable_name)} && instance_variable_defined?(#{original_variable_name}): #{instance_variable_defined?(original_variable_name)}"
       return false unless instance_variable_defined?(variable_name) && instance_variable_defined?(original_variable_name)
 
-      Rails.logger.debug 'instance variables were defined, carry on...'
+      # Rails.logger.debug 'instance variables were defined, carry on...'
       current_tags_for_context = instance_variable_get(variable_name)
       original_tags_for_context = instance_variable_get(original_variable_name)
 
-      Rails.logger.debug "current_tags_for_context.is_a?(Array): #{current_tags_for_context.is_a?(Array)} && original_tags_for_context.is_a?(Array): #{original_tags_for_context.is_a?(Array)}"
+      # Rails.logger.debug "current_tags_for_context.is_a?(Array): #{current_tags_for_context.is_a?(Array)} && original_tags_for_context.is_a?(Array): #{original_tags_for_context.is_a?(Array)}"
       if current_tags_for_context.is_a?(Array) && original_tags_for_context.is_a?(Array)
         current_tags_for_context = current_tags_for_context.uniq.sort
         original_tags_for_context = original_tags_for_context.uniq.sort
@@ -186,7 +186,7 @@ module ActsAsTaggableOn::Taggable
         current_sub_original = current_tags_for_context - original_tags_for_context
         original_sub_current = original_tags_for_context - current_tags_for_context
 
-        Rails.logger.debug "current_sub_original.present?: #{current_sub_original.present?} || original_sub_current.present?: #{original_sub_current.present?}"
+        # Rails.logger.debug "current_sub_original.present?: #{current_sub_original.present?} || original_sub_current.present?: #{original_sub_current.present?}"
         return current_sub_original.present? || original_sub_current.present? 
       else
         # returns false if none of the variables are Array
@@ -264,7 +264,7 @@ module ActsAsTaggableOn::Taggable
     def save_tags
       tagging_contexts.each do |context|
         if tag_list_changed?(context)
-          Rails.logger.debug "list of tags changed for context: #{context}"
+          # Rails.logger.debug "list of tags changed for context: #{context}"
           # List of currently assigned tag names
           tag_list = tag_list_cache_on(context).uniq
 
@@ -310,7 +310,7 @@ module ActsAsTaggableOn::Taggable
         end
         if instance_variable_defined?("@original_#{context.to_s.singularize}_list")
           # Get rid of the transition check variable to avoid "cross contamination"
-          Rails.logger.debug "Removing instance variable `@original_#{context.to_s.singularize}_list`"
+          # Rails.logger.debug "Removing instance variable `@original_#{context.to_s.singularize}_list`"
           remove_instance_variable "@original_#{context.to_s.singularize}_list"
         end
       end
